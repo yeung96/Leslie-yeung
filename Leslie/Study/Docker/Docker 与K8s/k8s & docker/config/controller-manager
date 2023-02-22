@@ -1,4 +1,0 @@
-KUBE_CONTROLLER_MANAGER_ARGS="--master=http://127.0.0.1:8080 \
-							  --log-dir=/var/log/kubernetes \
-							  --service-account-private-key-file=/home/yaoyuquan/serviceaccount.key \
-							  --v=2"

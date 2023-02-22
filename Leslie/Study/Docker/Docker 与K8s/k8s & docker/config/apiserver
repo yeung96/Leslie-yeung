@@ -1,9 +1,0 @@
-KUBE_API_ARGS="--etcd-servers=http://127.0.0.1:2379 \
-               --enable-admission-plugins=NamespaceLifecycle,LimitRanger,SecurityContextDeny,ServiceAccount,ResourceQuota \
-			   --logtostderr=false \
-			   --log-dir=/var/log/kubernetes \
-			   --service-cluster-ip-range=169.169.0.0/16 \
-			   --bind-address=0.0.0.0 \
-			   --insecure-bind-address=0.0.0.0 \
-			   --service-account-key-file=/home/yaoyuquan/serviceaccount.key \
-			   --v=2"
