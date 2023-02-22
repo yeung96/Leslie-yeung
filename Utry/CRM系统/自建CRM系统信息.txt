@@ -1,0 +1,47 @@
+域名登录地址：http://utrycrm.utry.cn/dist/index.html#/login?tenantId=C2C76468C2F1190F（映射216测试环境）
+
+
+开发环境
+内网访问：http://10.0.33.216:38092/dist/index.html#/login?tenantId=C2C76468C2F1190F
+测试环境数据库连接：10.0.33.217  root Utry@1234
+测试服务器信息：10.0.33.216  root  Utry1234
+测试数据库服务器信息：10.0.33.217  root  Utry@1234
+
+正式服务器信息：
+内网访问：http://utrycrm.utry.cn/dist/index.html#/login?tenantId=C2C76468C2F1190F
+正式数据库连接：10.0.4.92  root Utry@1234
+crm正式环境服务器: agent：10.0.4.91  root  Utry1234
+正式数据库服务器：10.0.4.92  root Utry1234
+
+UAT环境（审计）
+外网访问：http://10.0.33.221:38092/dist/index.html#/login?tenantId=C2C76468C2F1190F
+UAT环境数据库连接：10.0.33.222  root Utry@1234
+UAT服务器信息：10.0.33.221  root  Utry1234
+UAT数据库服务器信息：10.0.33.222  root  Utry@1234
+
+新UAT环境（测试）
+http://10.0.43.35:38092/dist/index.html#/remLogin?tenantId=C2C76468C2F1190F
+服务器：10.0.43.35     root   Utry1234
+数据库：10.0.43.38     root   Utry@1234
+
+小远正式crm环境
+http://xycrm.utry.cn/dist/index.html#/login?tenantId=C2C76468C2F1190F
+服务器：10.0.4.63       root   Utry1234
+数据库：10.0.4.64       root   Utry@1234
+
+小远开发地址
+http://10.0.4.67/dist/index.html#/login?tenantId=C2C76468C2F1190F
+服务器：10.0.4.67   root    Utry1234
+数据库：10.0.4.68    root   Utry@1234
+
+报销工具开发地址
+http://10.0.4.65/dist/index.html#/login?tenantId=C2C76468C2F1190F
+服务器：10.0.4.65   root    Utry1234
+数据库：10.0.4.66    root   Utry@1234
+
+审计开发环境：
+http://10.0.4.73:38092/dist/index.html#/login?tenantId=C2C76468C2F1190F
+10.0.4.73  10.0.4.74  root   Utry@1234（数据库）
+10.0.4.74  root   Utry@1234（数据库）
+
+BU_INF_PAGECFG、BU_INF_VUEPAGE_SRC、HASYS_DIC_ITEM、HASYS_DM_DEV_CONFIG、HASYS_DIC_INDEX、HASYS_DIC_CLASS

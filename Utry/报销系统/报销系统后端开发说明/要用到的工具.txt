@@ -1,0 +1,3 @@
+小piu详细设计：https://www.xiaopiu.com/project?proid=63720a7c8837c83ebab74f79
+数据库视图：http://10.0.33.176/PDManer-win_v4.2.0.exe
+git地址:http://10.0.33.40/IT_Dept/utmp-admin-loaned.git
