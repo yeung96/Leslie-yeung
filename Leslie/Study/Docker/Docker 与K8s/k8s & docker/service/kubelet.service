@@ -1,0 +1,15 @@
+[Unit]
+Description=Kubernetes Kubelet Server
+Documentation=https://github.com/kubernetes/kubernetes
+After=docker.service
+Wants=docker.service
+
+
+[Service]
+WorkingDirectory=/home/yaoyuquan/kubelet
+EnvironmentFile=/home/yaoyuquan/kubernetes-config/kubelet
+ExecStart=/home/yaoyuquan/kubernetes-exec/kubelet $KUBELET_ARGS
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

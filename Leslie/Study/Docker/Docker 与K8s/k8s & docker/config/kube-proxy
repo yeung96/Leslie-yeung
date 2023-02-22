@@ -1,0 +1,1 @@
+KUBE_PROXY_ARGS="--kubeconfig=/home/yaoyuquan/.kube/config --logtostderr=false --log-dir=/var/log/kubernetes --v=2"

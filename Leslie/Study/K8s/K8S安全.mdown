@@ -1,0 +1,2493 @@
+# 一、集群安全设置
+
+
+
+## 1.CIS安全基准
+
+### 1.1 说明
+
+互联网安全中心（CIS，Center for Internet Security），是一个非盈利组织，致力为互联网提供免费的安全防御解决方案。 
+
+官网：https://www.cisecurity.org/
+
+Kubernetes CIS基准：https://www.cisecurity.org/benchmark/kubernetes/
+
+
+
+### 1.2 **CIS基准测试工具说明**
+
+Kube-bench是容器安全厂商Aquq推出的工具，以CIS K8s基准作为基础，来检查K8s是否安全部署。
+
+主要查找不安全的配置参数、敏感的文件权限、不安全的帐户或公开端口等等。
+
+项目地址：https://github.com/aquasecurity/kube-bench
+
+此次使用的是0.6.3版本
+
+下载地址：https://github.com/aquasecurity/kube-bench/releases/download/v0.6.3/kube-bench_0.6.3_linux_amd64.tar.gz
+
+最新版本下载地址：https://github.com/aquasecurity/kube-bench/releases
+
+
+
+### 1.3 **测试工具：kube-beach使用**
+
+1. **上传解压安装包**
+
+   ```sh
+   tar zxvf kube-bench_0.6.3_linux_amd64.tar.gz
+   # 移动至系统的二进制命令下
+   mv kube-bench /usr/bin/
+   # 创建默认配置文件路径
+   mkdir /etc/kube-bench
+   # 移动配置文件
+   mv cfg /etc/kube-bench/cfg
+   ```
+
+   ![image-20220103145826997](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103145826997.png)
+
+2. **测试命令说明**
+
+   使用kube-bench run进行测试，该指令有以下常用参数：
+
+   常用参数：
+
+   - -s, --targets 指定要基础测试的目标，这个目标需要匹配`cfg/<version>`中的文件名称，已有目标：master, controlplane, node, etcd, policies
+
+     ![image-20220103150035885](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103150035885.png)
+
+   - --version：指定k8s版本，**如果未指定会自动检测**
+
+   - --benchmark：手动指定CIS基准版本，不能与--version一起使用
+
+3.  **kube-bench与k8s版本说明**
+
+   现在k8s版本基本都是1.16版本以上，所以kube-bench基本都是使用的1.6.0版本
+
+   ![image-20220103145337404](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103145337404.png)
+
+4. **示例**
+
+   如：检查master组件安全配置
+
+   ```shell
+   kube-bench run --targets=master
+   # 如果要检查其他的修改即可，如：
+   # 检查node
+   kube-bench run --targets=node
+   # 检查etcd
+   kube-bench run --targets=etcd
+   ```
+
+   执行后会逐个检查安全配置并输出修复方案及汇总信息输出：
+
+   ![image-20220103150742836](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103150742836.png)
+
+   [PASS]：测试通过
+
+   [FAIL]：测试未通过，重点关注，在测试结果会给出修复建议
+
+   [WARN]：警告，可做了解
+
+   [INFO]：信息
+
+5.  **异常修复演示**
+
+   上面进行master组件安全配置检查，其中有11项检查未通过
+
+   检查未通过的问题其实已经打印出了修复方案，如以下这条:
+
+   ```shell
+   [FAIL] 1.2.21 Ensure that the --profiling argument is set to false (Automated)
+   ```
+
+   ![image-20220103174739708](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103174739708.png)
+
+   给的修复方案：
+
+   意思就是修改`/etc/kubernetes/manifests/kube-apiserver.yaml`配置文件，添加`--profiling=false`参数	
+
+   ```shell
+   1.2.21 Edit the API server pod specification file /etc/kubernetes/manifests/kube-apiserver.yaml
+   on the master node and set the below parameter.
+   --profiling=false
+   ```
+
+   ![image-20220103174807781](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103174807781.png)
+
+   安装修复说明进行修改,注意有多个master也按照同样的方式修改。
+
+   ```shell
+   vim /etc/kubernetes/manifests/kube-apiserver.yaml
+   # 添加参数
+   --profiling=false
+   ```
+
+   ![image-20220103181239389](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103181239389.png)
+
+   重启kubelet
+
+   ```shell
+   systemctl  restart kubelet
+   # 查看
+   systemctl  status kubelet
+   ```
+
+   再次执行检查
+
+   ```shell
+   kube-bench run --targets=master
+   ```
+
+   查看结果1.2.21已经是通过状态
+
+   ![image-20220103181555050](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103181555050.png)
+
+   [FAIL]状态已经少了一个
+
+   ![image-20220103181433349](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103181433349.png)
+
+   
+
+6. **跳过修复修复检查**
+
+   有时有的参数不修复没有影响，但是结果是不通过的状态，这时可以通过修改配置文件，跳过修复检查。
+
+   配置文件目录：`/etc/kube-bench/cfg/cis-1.6/`
+
+   如需要修改master检查
+
+   ```shell
+   vim /etc/kube-bench/cfg/cis-1.6/master.yaml
+   ```
+
+   ![image-20220103183955096](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103183955096.png)
+
+   参数说明：
+
+   - id：编号
+
+   - text：提示的文本
+
+   - audit： 获取检查目标的信息
+
+   - tests：测试项目
+
+   - remediation：修复方案
+
+   - scored：如果为true，kube-bench无法正常测试，则会生成FAIL，如果为false，无法正常测试，则会生成WARN。 
+
+   - type：新增字段，可以实现是否跳过检查。参数如果为manual则会生成WARN，如果为skip，则会生成INFO
+
+   演示跳过修复演示：
+
+   如master检查中有一条未通过：
+
+   ```shell
+   [FAIL] 1.4.1 Ensure that the --profiling argument is set to false (Automated)
+   ```
+
+   在官方文档中此参数已经弃用，我们可以添加`type: skip` 参数跳过此检查
+
+   ```shell
+   # 修改对应的配置文件，这里是master
+   vim /etc/kube-bench/cfg/cis-1.6/master.yaml
+   # 根据编号查找：1.4.1，并添加参数:type: skip  注意格式
+   # 修改完成保存退出
+   ```
+
+   ![image-20220103190005332](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103190005332.png)
+
+   再次运行测试：
+
+   ```shell
+   kube-bench run --targets=master
+   ```
+
+   查看结果：编号**1.4.1**已经变为**[info]**
+
+   ![image-20220103190104738](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103190104738.png)
+
+
+
+## 2. ingress配置证书
+
+### 2.1 **HTTPS重要性**
+
+HTTPS是安全的HTTP，HTTP 协议中的内容都是明文传输，HTTPS 的目的是将这些内容加密，确保信息传输安全。最后一个字母 S 指是 SSL/TLS 协议，它位于HTTP 协议与 TCP/IP 协议中间。
+
+**HTTPS优势：**
+
+1、加密隐私数据：防止您访客的隐私信息(账号、地址、手机号等)被劫持或窃取。 
+
+2、安全身份认证：验证网站的真实性，防止钓鱼网站。 
+
+3、防止网页篡改：防止数据在传输过程中被篡改，保护用户体验。 
+
+4、地址栏安全锁：地址栏头部的“锁”型图标，提高用户信任度。 
+
+5、提高SEO排名：提高搜索排名顺序，为企业带来更多访问量。
+
+
+
+### 2.2 生成证书
+
+这里使用cfssl'工具进行生成,先上传安装包`cfssl.tar.gz`并解压
+
+```shell
+# 解压
+tar -xvf cfssl.tar.gz
+# 把解压文件移动至系统的二进制命令下
+mv cfssl cfssl-certinfo  cfssljson  /usr/bin/
+# 创建一个https目录
+mkdir  https
+cd https
+# 执行脚本,如果有需要修改的直接修改即可
+sh -x certs.sh
+```
+
+脚本内容：
+
+```sh
+cat > ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "87600h"
+    },
+    "profiles": {
+      "kubernetes": {
+         "expiry": "87600h",
+         "usages": [
+            "signing",
+            "key encipherment",
+            "server auth",
+            "client auth"
+        ]
+      }
+    }
+  }
+}
+EOF
+
+cat > ca-csr.json <<EOF
+{
+    "CN": "kubernetes",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "L": "Beijing",
+            "ST": "Beijing"
+        }
+    ]
+}
+EOF
+
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca -
+
+cat > web.test.cn-csr.json <<EOF
+{
+  "CN": "web.test.cn",
+  "hosts": [],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "L": "BeiJing",
+      "ST": "BeiJing"
+    }
+  ]
+}
+EOF
+
+cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=kubernetes web.test.cn-csr.json | cfssljson -bare web.test.cn
+```
+
+执行结果：
+
+![image-20220103204847869](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103204847869.png)
+
+
+
+### 2.3 将证书保存到secret中
+
+在k8s中创建一个secret
+
+```shell
+kubectl  create secret tls web-test-cn --cert=web.test.cn.pem  --key=web.test.cn-key.pem
+```
+
+
+
+### 2.4 ingress配置证书
+
+先创建一个测试使用的deployment和svc
+
+```shell
+# 创建deployment
+kubectl  create deployment web-test --image=nginx
+# 创建svc
+kubectl  expose deployment web-test --type=NodePort --port=80 --target-port=80 --name=web-test
+```
+
+创建ingres
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: https-test
+spec:
+  tls:
+  - hosts:
+      - web.test.cn
+    secretName: web-test-cn
+  rules:
+  - host: web.test.cn
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-test
+            port:
+              number: 80
+```
+
+### 2.5 测试
+
+在本地电脑绑定hosts记录对应ingress里面配置的域名，IP是Ingress Concontroller Pod节点IP
+
+如：
+
+修改本机hosts文件，添加一下内容
+
+文件目录地址：C:\Windows\System32\drivers\etc
+
+```shell
+10.0.33.190 web.test.cn
+```
+
+测试访问：https+域名:443      (**注意：新版本ingress concontroller 是使用的svc端口**）
+
+https://web.test.cn/
+
+![image-20220103214611400](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103214611400.png)
+
+
+
+## 3. 网络策略
+
+### 3.1 说明
+
+默认情况下，Kubernetes 集群网络没任何网络限制，Pod 可以与任何其他 Pod 通信，在某些场景下就需要进行网络控制，减少网络攻击面，提高安全性，这就会用到网络策略。
+
+网络策略（Network Policy）：是一个K8s资源，用于限制Pod出入流量，提供Pod级别和Namespace级别网络访问控制。
+
+
+
+网络策略的应用场景：
+
+- 应用程序间的访问控制，例如项目A不能访问项目B的Pod
+
+- 开发环境命名空间不能访问测试环境命名空间Pod
+
+- 当Pod暴露到外部时，需要做Pod白名单
+
+- 多租户网络环境隔离
+
+
+
+示例：
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: test-network-policy # 目标命名空间，也就是对那个命名空间生效
+  namespace: default
+spec:
+  podSelector:  # 标签选择
+    matchLabels:
+      role: db # 对标签为db的pod生效
+  policyTypes: # 流量入口还是出口。ingress为入口，egress为出口
+  - Ingress
+  - Egress
+  ingress: 
+  - from: # 入口限制配置
+    - ipBlock: # ip段限制
+        cidr: 172.17.0.0/16  # 指定此ip段可以访问
+        except:
+        - 172.17.1.0/24   # 排除ip段访问
+    - namespaceSelector: # 命名空间选择
+        matchLabels:
+          project: myproject # 指定标签为project: myproject 可以访问
+    - podSelector: # pod选择
+        matchLabels:
+          role: frontend # 指定标签为role: frontend 可以访问
+    ports: # 端口限制
+    - protocol: TCP
+      port: 6379 # 指定只可以访问6379
+  egress: # 出口限制
+  - to:
+    - ipBlock:
+        cidr: 10.0.0.0/24
+    ports:
+    - protocol: TCP
+      port: 5978
+```
+
+podSelector：目标Pod，根据标签选择。
+
+policyTypes：策略类型，指定策略用于入站、出站流量。
+
+Ingress：from是可以访问的白名单，可以来自于IP段、命名空间、
+
+Pod标签等，ports是可以访问的端口。
+
+Egress：这个Pod组可以访问外部的IP段和端口
+
+
+
+### 3.2 案例1：拒绝命名空间下所有Pod出入站流量
+
+需求说明：
+
+创建一个名为`test`的命名空间，此命名空间下的pod拒绝所有的出入站访问
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-all
+  namespace: test
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+```
+
+说明：
+
+podSelector: {} :为空表示匹配本命名空间下的所有的pod
+
+Ingress和Egress 的规则都为空，表示拒绝所有的出入站流量
+
+测试：
+
+创建测试pod，访问外部地址,结果为拒绝访问。
+
+```shell
+# 创建测试pod
+kubectl run busybox --image=busybox -n test -- sleep 1h
+# 访问baidu.com
+kubectl exec busybox  -n test -- ping baidu.com 
+```
+
+测试外部pod访问，结果为拒绝访问。
+
+```shell
+# 在test命令空间创建pod,名为web
+kubectl run web --image=nginx -n test
+# 默认命名空间创建测试pod，名为busybox
+kubectl run busybox --image=busybox -- sleep 1h
+# 查看test命令空间pod ip
+kubectl get pod -o wide  -n test |grep web
+# 默认命名空间busybox访问test命名空间web的ip
+kubectl exec busybox -- ping 10.244.159.162
+```
+
+测试内部pod之间访问，结果为拒绝访问。
+
+```shell
+# 上面已经创建了pod，这里直接测试即可
+kubectl exec busybox  -n test -- ping 10.244.159.162
+```
+
+
+
+### 3.3 案例2：**拒绝其他命名空间Pod访问**
+
+需求说明：
+
+test命名空间下所有pod可以互相访问，也可以访问其他命名空间Pod，但其他命名空间不能访问test命名空间Pod。
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-ns
+  namespace: test
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+```
+
+测试： **（注意测试之前需要把案例1的策略删除）**
+
+同命名空间测试为正常访问。
+
+```shell
+# 上面已经创建了pod，这里直接测试即可。之前是不通的，再次测试结果是可以正常访问
+kubectl exec busybox  -n test -- ping 10.244.159.162
+```
+
+![image-20220103230508931](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103230508931.png)
+
+测试不同命名空间的pod访问，结果为拒绝访问
+
+```yaml
+# 同样适用之前创建的pod测试，结果为不痛
+kubectl exec busybox -- ping 10.244.159.162
+```
+
+![image-20220103230647163](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103230647163.png)
+
+
+
+### 3.4 案例3：**拒绝其他命名空间Pod访问**
+
+需求说明：
+
+允许其他命名空间访问test命名空间指定Pod，可以访问的Pod标签为app: web
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-app
+  namespace: test
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector: {}
+```
+
+
+
+
+
+### 3.5 案列4：**同一个命名空间下应用之间限制访问**
+
+需求说明：
+
+需求：将test命名空间中标签为run=web的pod隔离，只允许标签为run=client1的pod访问80端口
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deny-app-app
+  namespace: test
+spec:
+  podSelector:
+    matchLabels:
+      run: web
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          run: client1
+    ports:
+    - protocol: TCP
+      port: 80
+```
+
+测试：（同样删除之前的策略）
+
+```shell
+# 创建测试pod，镜像为nginx（默认端口是80），标签为 run=web
+kubectl run web-test --image=nginx --labels="run=web" -n test
+# 创建测试pod，标签为 run=client1
+kubectl run busybox2 --image=busybox --labels="run=client1" -n test -- sleep 1h
+# 查看run=web的pod ip
+kubectl get pod -o wide  -n test |grep web-test
+# 进入容器
+kubectl exec -it  busybox2 -n test  sh
+# 执行wget命令测试是否可以访问80端口
+wget 10.244.159.166
+```
+
+![image-20220103232523015](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103232523015.png)
+
+```sh
+# 同命名空间但是标签不一样的访问，访问是拒绝的
+kubectl exec -it  busybox -n test  sh
+```
+
+![image-20220103232656798](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220103232656798.png)
+
+
+
+### 3.6 案例五：**只允许指定命名空间中的应用访问**
+
+需求说明：只允许指定命名空间中的应用访问和其他所有命名空间指定标签pod访问
+
+• 应用策略命名空间在dev，web的pod标签为env=dev
+
+• 允许prod命名空间中的pod访问，及其他命名空间中的pod标签为app=client1的pod访问
+
+
+
+
+
+# 二、集群强化-RBAC
+
+## 1. K8S安全架构
+
+### 1.1 安装架构说明
+
+- K8S安全控制框架主要由下面3个阶段进行控制，每一个阶段都支持插件方式，通过API Server配置来启用插件。
+
+1. Authentication（鉴权）
+
+2. Authorization（授权）
+
+3. Admission Control（准入控制） 
+
+-  客户端要想访问K8s集群API Server，一般需要证书、Token或者用户名+密码；如果Pod访问，需要ServiceAccount
+
+![image-20220104193833227](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104193833227.png)
+
+### 1.2 **安全框架：鉴权（Authentication）**
+
+K8s Apiserver提供三种客户端身份认证： 
+
+- HTTPS 证书认证：基于CA证书签名的数字证书认证（kubeconfig） 
+
+- HTTP Token认证：通过一个Token来识别用户（serviceaccount） 
+
+- HTTP Base认证：用户名+密码的方式认证（1.19版本弃用）
+
+
+
+### 1.3 **授权（Authorization）**
+
+RBAC（Role-Based Access Control，基于角色的访问控制）：负责完成授权（Authorization）工作。
+
+RBAC根据API请求属性，决定允许还是拒绝。
+
+比较常见的授权维度：
+
+- user：用户名
+
+- group：用户分组
+
+- 资源，例如pod、deployment
+
+- 资源操作方法：get，list，create，update，patch，watch，delete
+
+- 命名空间
+
+- API组
+
+### 1.4 **安全框架：准入控制（Admission Control）**
+
+Adminssion Control实际上是一个准入控制器插件列表，发送到API Server的请求都需要经过这个列表中的每个准入控制器插件的检查，检查不通过，则拒绝请求。
+
+启用一个准入控制器：
+
+`kube-apiserver --enable-admission-plugins=NamespaceLifecycle,LimitRanger ...`
+
+关闭一个准入控制器：
+
+`kube-apiserver --disable-admission-plugins=PodNodeSelector,AlwaysDeny ...`
+
+查看默认启用：
+
+`kubectl exec kube-apiserver-k8s-master -n kube-system -- kube-apiserver -h | grep enable-admission-plugins`
+
+
+
+## 2. RBAC
+
+### 2.1 RBAC说明
+
+**RBAC（Role-Based Access Control，基于角色的访问控制），**是K8s默认授权策略，并且是动态配置策略（修改即时生效）。
+
+![image-20220104195607410](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104195607410.png)
+
+**主体（subject）** 
+
+-  User：用户
+
+- Group：用户组
+
+- ServiceAccount：服务账号
+
+**角色**
+
+- Role：授权特定命名空间的访问权限
+
+- ClusterRole：授权所有命名空间的访问权限
+
+**角色绑定**
+
+- RoleBinding：将角色绑定到主体（即subject） 
+
+- ClusterRoleBinding：将集群角色绑定到主体
+
+**注**：RoleBinding在指定命名空间中执行授权，ClusterRoleBinding在集群范围执行授权
+
+
+
+### 2.2 内置集群角色
+
+k8s预定好了四个集群角色供用户使用，使用`kubectl get clusterrole`查看，其中systemd:开头的为系统内部使用。
+
+| **内置集群角色** | **描述**                                                     |
+| ---------------- | ------------------------------------------------------------ |
+| cluster-admin    | 超级管理员，对集群所有权限                                   |
+| admin            | 主要用于授权命名空间所有读写权限                             |
+| edit             | 允许对命名空间大多数对象读写操作，不允许查看或者修改角色、角色绑定 |
+| view             | 允许对命名空间大多数对象只读权限，不允许查看角色、角色绑定和Secret |
+
+
+
+## 3. 案例1：**对用户授权访问K8s（TLS证书）**
+
+
+
+需求说明：
+
+为指定用户授权访问不同命名空间权限，例如新入职一个新同事(zhangsan)，希望让他先熟悉K8s集群，为了安全性，先不能给他太大权限，因此先给他授权访问default命名空间Pod读取权限。
+
+实施大致步骤：
+
+1. 用K8S CA签发客户端证书
+
+2. 生成kubeconfig授权文件
+
+3. 创建RBAC权限策略
+
+4. 指定kubeconfig文件测试权限：kubectl get pods --kubeconfig=./aliang.kubeconfig
+
+
+
+### 3.1 签发证书
+
+生成脚本：
+
+`vim cert.sh`
+
+```shell
+
+cat > ca-config.json <<EOF
+{
+  "signing": {
+    "default": {
+      "expiry": "87600h"
+    },
+    "profiles": {
+      "kubernetes": {
+        "usages": [
+            "signing",
+            "key encipherment",
+            "server auth",
+            "client auth"
+        ],
+        "expiry": "87600h"
+      }
+    }
+  }
+}
+EOF
+
+cat > zhangsan-csr.json <<EOF
+{
+  "CN": "zhangsan",
+  "hosts": [],
+  "key": {
+    "algo": "rsa",
+    "size": 2048
+  },
+  "names": [
+    {
+      "C": "CN",
+      "ST": "BeiJing",
+      "L": "BeiJing",
+      "O": "k8s",
+      "OU": "System"
+    }
+  ]
+}
+EOF
+
+cfssl gencert -ca=/opt/kubernetes/ssl/ca.pem -ca-key=/opt/kubernetes/ssl/ca-key.pem -config=ca-config.json -profile=kubernetes zhangsan-csr.json | cfssljson -bare zhangsan
+```
+
+修改项：
+
+"CN": "zhangsan" ： 这里是指为谁颁发，如新入职的同事名为zhangsan，这里就写zhangsan
+
+注意：
+
+`cfssl gencert -ca=/etc/kubernetes/pki/ca.crt -ca-key=/etc/kubernetes/pki/ca.key -config=ca-config.json -profile=kubernetes zhangsan-csr.json | cfssljson -bare zhangsan`
+
+这里需要制定k8s的证书，如果kubeadm安装的默认路径为：`/etc/kubernetes/pki/`，如果是二进制安装的则需要改为实际的路径,如果不知道路径，可以查看`kube-apiserver.conf`查看获取。
+
+执行生成脚本：
+
+注意需要先安装cfssl工具
+
+```shell
+sh -x cert.sh
+```
+
+![image-20220104202120821](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104202120821.png)
+
+
+
+### 3.2 生成kube-config文件
+
+使用脚本生成
+
+`vim kubeconfig.sh`  在刚生成的证书同级执行
+
+```shell
+# 配置集群的信息
+# 填写连接集群的信息，生成的文件名为：zhangsan.kubeconfig
+kubectl config set-cluster kubernetes \
+  --certificate-authority=/opt/kubernetes/ssl/ca.pem \
+  --embed-certs=true \
+  --server=https://10.0.33.190:6443 \
+  --kubeconfig=zhangsan.kubeconfig
+
+# 设置客户端认证
+#  需要配置证书地址，这里是和脚本同级，如果不是需要指定路径
+kubectl config set-credentials zhangsan \
+  --client-key=zhangsan-key.pem \
+  --client-certificate=zhangsan.pem \
+  --embed-certs=true \
+  --kubeconfig=zhangsan.kubeconfig
+
+# 设置默认上下文
+kubectl config set-context kubernetes \
+  --cluster=kubernetes \
+  --user=zhangsan \
+  --kubeconfig=zhangsan.kubeconfig
+
+# 设置当前使用配置
+kubectl config use-context kubernetes --kubeconfig=zhangsan.kubeconfig
+```
+
+
+
+`sh -x kubeconfig.sh` 执行如果没有报错说明成功，执行完成后会在当前目录下生成`zhangsan.kubeconfig`文件
+
+测试：
+
+执行获取pod的命令
+
+```shell
+kubectl get pod --kubeconfig=zhangsan.kubeconfig
+```
+
+提示没有权限，这是正常的![image-20220104205356282](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104205356282.png)
+
+
+
+### 3.3 创建RBAC权限策略
+
+**创建基于role的访问权限**
+
+`vim rbac-role.yaml`
+
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+```
+
+参数说明：
+
+-  namespace: default
+
+  指定命名空间，也就是在哪个命名空间生效
+
+- name: pod-reader
+
+  role资源的名称
+
+- apiGroups: [""] 
+
+   api组，例如apps组，空值表示是核心API组，像namespace、pod、service、pv、pvc都在里面。可以通过命令：` kubectl  api-resources`查看。
+
+  如想要查看deployment在哪个组里面：`kubectl api-resources |grep deployments`
+
+  结果为：`apps/v1` 组，注意填写配置文件中时需要把"/v1"去掉，也就是填写"apps"
+
+  ![image-20220104210111321](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104210111321.png)
+
+- resources: ["pods"]
+
+  资源名称（复数），填写想要赋予的资源名称。例如pods、deployments、services
+
+- verbs: ["get", "watch", "list"]
+
+  资源操作方法, 如：get，create
+
+创建RBAC权限策略：
+
+```shell
+kubectl apply -f rbac-role.yaml
+# 执行完没有报错，可以查看
+kubectl get role |grep  pod-reader
+```
+
+![image-20220104210827948](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104210827948.png)
+
+
+
+**角色绑定**
+
+将主体与角色绑定（RoleBinding）
+
+`vim rbac-rbd.yaml`
+
+```yaml
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: read-pods
+  namespace: default
+subjects:
+- kind: User # 主体类型
+  name: zhangsan # 主体名
+  apiGroup: rbac.authorization.k8s.io
+roleRef:  # 绑定角色
+  kind: Role
+  name: pod-reader # # 这里要与上面Role资源的名称一致
+  apiGroup: rbac.authorization.k8s.io
+```
+
+应用创建
+
+```shell
+kubectl apply -f rbac-rbd.yaml
+```
+
+### 3.4 测试
+
+查看默认命名空间的pod
+
+```shell
+kubectl get pods --kubeconfig=zhangsan.kubeconfig
+```
+
+结果可以正常查看
+
+![image-20220104212140161](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104212140161.png)查看其他命名空间
+
+```shell
+kubectl get pods -n kube-system  --kubeconfig=zhangsan.kubeconfig
+```
+
+结果提示没有权限
+
+![image-20220104212240933](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104212240933.png)
+
+查看其他资源，如：deployment
+
+```shell
+kubectl get deployment --kubeconfig=zhangsan.kubeconfig
+```
+
+结果提示没有权限
+
+![image-20220104214630329](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104214630329.png)
+
+以上查看deployment没有权限的，如果想要查看可以通过以下方式修改：
+
+`vim rbac-role.yaml`
+
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: default
+  name: pod-reader
+rules:
+- apiGroups: ["","apps/v1"]
+  resources: ["pods","deployments"]
+  verbs: ["get", "watch", "list"]
+```
+
+修改字段：
+
+apiGroups: 添加"apps" 
+
+resources: 添加"deployments"
+
+```shell
+# 应用
+kubectl apply -f rbac-role.yaml
+# 测试
+kubectl get deployment --kubeconfig=zhangsan.kubeconfig
+```
+
+结果为可以查看
+
+![image-20220104215333092](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104215333092.png)
+
+
+
+## 4. 案例2：**对用户组授权访问K8s（TLS证书）**
+
+**用户组：**如果有多个用户，一个个对用户过于繁琐，这时可以对用户组进行授权。授权用户组的好处是无需单独为某个用户创建权限，统一为这个组名进行授权，所有的用户都以组的身份访问资源。
+
+需求：
+
+如有一个开发组（dev），有多个开发人员，赋予开发组用户有**默认命名空间下有查看pod，deployment，svc**权限。
+
+
+
+### 4.1 实现步骤
+
+实现步骤基本上和用户授权一致，这里就大致的执行测试下
+
+1. 修改证书生成脚本
+
+   新建一个目录，复制脚本并修改。
+
+   主要修改内容：
+
+   xxx-csr.json下的"O"字段改为dev。之前基于用户授权使用的"CN"字段，这里可以随便写了。
+
+   ```shell
+   cat > ca-config.json <<EOF
+   {
+     "signing": {
+       "default": {
+         "expiry": "87600h"
+       },
+       "profiles": {
+         "kubernetes": {
+           "usages": [
+               "signing",
+               "key encipherment",
+               "server auth",
+               "client auth"
+           ],
+           "expiry": "87600h"
+         }
+       }
+     }
+   }
+   EOF
+   
+   cat > dev-csr.json <<EOF
+   {
+     "CN": "dev",
+     "hosts": [],
+     "key": {
+       "algo": "rsa",
+       "size": 2048
+     },
+     "names": [
+       {
+         "C": "CN",
+         "ST": "BeiJing",
+         "L": "BeiJing",
+         "O": "dev",
+         "OU": "System"
+       }
+     ]
+   }
+   EOF
+   
+   cfssl gencert -ca=/opt/kubernetes/ssl/ca.pem -ca-key=/opt/kubernetes/ssl/ca-key.pem -config=ca-config.json -profile=kubernetes dev-csr.json | cfssljson -bare dev
+   ```
+
+   执行脚本
+
+   
+
+2. 生成kube-config文件
+
+   把之前的"zhangsan"改为"dev"即可
+
+   ```shell
+   # 配置集群的信息
+   # 填写连接集群的信息，生成的文件名为：dev.kubeconfig
+   kubectl config set-cluster kubernetes \
+     --certificate-authority=/opt/kubernetes/ssl/ca.pem \
+     --embed-certs=true \
+     --server=https://10.0.33.190:6443 \
+     --kubeconfig=dev.kubeconfig
+   
+   # 设置客户端认证
+   #  需要配置证书地址，这里是和脚本同级，如果不是需要指定路径
+   kubectl config set-credentials dev \
+     --client-key=dev-key.pem \
+     --client-certificate=dev.pem \
+     --embed-certs=true \
+     --kubeconfig=dev.kubeconfig
+   
+   # 设置默认上下文
+   kubectl config set-context kubernetes \
+     --cluster=kubernetes \
+     --user=dev \
+     --kubeconfig=dev.kubeconfig
+   
+   # 设置当前使用配置
+   kubectl config use-context kubernetes --kubeconfig=dev.kubeconfig
+   ```
+
+3. 创建用户组及绑定
+
+   `vim rbac.yaml`
+
+   ```yaml
+   kind: Role
+   apiVersion: rbac.authorization.k8s.io/v1
+   metadata:
+     namespace: default
+     name: dev-pod-reader
+   rules:
+   - apiGroups: ["","apps"]
+     resources: ["pods","deployments","services"]
+     verbs: ["get", "watch", "list"]
+   
+   ---
+   kind: RoleBinding
+   apiVersion: rbac.authorization.k8s.io/v1
+   metadata:
+     name: dev-read-pods
+     namespace: default
+   subjects:
+   - kind: Group # 主体类型,这里要改为用户组
+     name: dev # 主体名
+     apiGroup: rbac.authorization.k8s.io
+   roleRef:  # 绑定角色
+     kind: Role
+     name: dev-pod-reader # 这里要与上面Role资源的名称一致
+     apiGroup: rbac.authorization.k8s.io
+   ```
+
+4. 测试
+
+   ```shell
+   # 查看deployment
+   kubectl get deployment --kubeconfig=zhangsan.kubeconfig
+   # 查看pod 和svc
+   kubectl get pod,svc --kubeconfig=dev.kubeconfig
+   ```
+
+   结果为可以查看
+
+   ![image-20220104223608439](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220104223608439.png)
+
+
+
+## 5. 案例3：**对应用程序授权访问K8s（ServiceAccount）**
+
+
+
+### 5.1 **ServiceAccount**说明
+
+**ServiceAccount，简称SA，是一种用于让程序访问K8s API的服务账号。**
+
+- 当创建naamespace时，会自动创建一个名为default的SA，这个SA没有绑定任何权限
+
+  ```shell
+  # 如随便查看一个命名空间
+  kubectl get sa -n test
+  ```
+
+  ![image-20220105085621235](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105085621235.png)
+
+- 当default SA创建时，会自动创建一个default-token-xxx的secret，并自动关联到SA
+
+- 当创建Pod时，如果没有指定SA，会自动为pod以volume方式挂载这个default SA，在容器目录：/var/run/secrets/kubernetes.io/serviceaccount
+
+  ```shell
+  kubectl describe pod web-test -n test
+  ```
+
+  ![image-20220105085720080](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105085720080.png)
+
+
+
+- 验证默认SA权限：kubectl --as=system:serviceaccount:default:default get pods
+
+  ```shell
+  # 如随便找一个默认创建default的sa测试
+  # default:default  是命名空间名称:sa名称
+  kubectl --as=system:serviceaccount:default:default get pods
+  ```
+
+  提示没有权限
+
+  ![image-20220105085940216](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105085940216.png)
+
+
+
+### 5.2 需求说明
+
+**需求：授权容器中Python程序对K8s API访问权限**
+
+实现步骤：
+
+1. 准备环境
+2. 创建Role
+3. 创建ServiceAccount
+4.  将ServiceAccount与Role绑定
+5. 进入容器里执行Python程序测试操作K8s API权限
+
+
+
+### 5.3 准备环境
+
+python脚本准备：
+
+`vim k8s-api-test.py`
+
+脚本大致内容就是使用token进行程序访问k8s资源测试
+
+```python
+from kubernetes import client, config
+
+with open('/var/run/secrets/kubernetes.io/serviceaccount/token') as f:
+     token = f.read()
+
+configuration = client.Configuration()
+configuration.host = "https://kubernetes"  # APISERVER地址
+configuration.ssl_ca_cert="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"  # CA证书 
+configuration.verify_ssl = True   # 启用证书验证
+configuration.api_key = {"authorization": "Bearer " + token}  # 指定Token字符串
+client.Configuration.set_default(configuration)
+apps_api = client.AppsV1Api() 
+core_api = client.CoreV1Api() 
+try:
+  print("###### Deployment列表 ######")
+  #列出default命名空间所有deployment名称
+  for dp in apps_api.list_namespaced_deployment("default").items:
+    print(dp.metadata.name)
+except:
+  print("没有权限访问Deployment资源！")
+
+try:
+  #列出default命名空间所有pod名称
+  print("###### Pod列表 ######")
+  for po in core_api.list_namespaced_pod("default").items:
+    print(po.metadata.name)
+except:
+  print("没有权限访问Pod资源！")
+```
+
+### 5.4 权限配置及绑定
+
+以下yaml中，创建了Role、SA及SA与Role的绑定。并且创建了一个Pthon3环境的pod
+
+**注意:**pod中指定的是新创建的ServiceAccountName
+
+```yaml
+# 创建SA
+apiVersion: v1
+kind: ServiceAccount 
+metadata:
+  name: py-k8s 
+---
+# 创建Role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: py-role 
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+---
+# SA与ROle绑定
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: py-role 
+  namespace: default
+subjects:
+- kind: ServiceAccount 
+  name: py-k8s 
+roleRef:
+  kind: Role
+  name: py-role 
+  apiGroup: rbac.authorization.k8s.io
+---
+# 创建python3环境pod，并指定serviceAccountName
+apiVersion: v1
+kind: Pod
+metadata:
+  name: py-k8s 
+spec:
+  serviceAccountName: py-k8s 
+  containers:
+  - image: python:3
+    name: python
+    command:
+    - sleep 
+    - 24h
+```
+
+创建后查看，创建pod可能需要一会
+
+```shell
+kubectl  get pod,sa,role,rolebinding |grep py
+```
+
+![image-20220105103214336](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105103214336.png)
+
+
+
+
+
+### 5.4 测试
+
+复制py脚本到容器中：
+
+```shell
+kubectl cp k8s-api-test.py py-k8s:/
+```
+
+进入容器：
+
+```shell
+kubectl exec -it py-k8s bash
+```
+
+执行py脚本：
+
+```shell
+python3 k8s-api-test.py
+```
+
+这里会报错：ModuleNotFoundError: No module named 'kubernetes'
+
+这是因为没有模块安装一下即可,注意是在容器中执行
+
+```shell
+pip install kubernetes -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+再次执行：
+
+```shell
+python3 k8s-api-test.py
+```
+
+结果：
+
+可以列出默认命名空间的pod，但是无法列出deployment
+
+![image-20220105125056837](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105125056837.png)
+
+如果想要列出deployment，则添加以下权限即可：
+
+在创建Role中添加
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: py-role 
+rules:
+- apiGroups: ["","apps"]
+  resources: ["pods","deployments"]
+  verbs: ["get", "watch", "list"]
+```
+
+应用完成后，再 次执行py脚本，结果为可以查看deployment
+
+![image-20220105125347921](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105125347921.png)
+
+
+
+
+
+# 三、集群强化-资源限制
+
+## 1. ResourceQuota
+
+### 1.1 说明
+
+ResourceQuota对命名空间资源使用总量做限制
+
+当多个团队、多个用户共享使用K8s集群时，会出现不均匀资源使用，默认情况下先到先得，这时可以通过ResourceQuota来对命名空间资源使用总量做限制，从而解决这个问题。
+
+使用流程：k8s管理员为每个命名空间创建一个或多个ResourceQuota对象，定义资源使用总量，K8s会跟踪命名空间资源使用情况，当超过定义的资源配额会返回拒绝
+
+ResourceQuota功能是一个准入控制插件，默认已经启用：
+
+| **支持的资源**                                               | **描述**                                                  |
+| ------------------------------------------------------------ | --------------------------------------------------------- |
+| limits.cpu/memory                                            | 所有Pod上限资源配置总量不超过该值（所有非终止状态的Pod）  |
+| requests.cpu/memory                                          | 所有Pod请求资源配置总量不超过该值（所有非终止状态的Pod）  |
+| cpu/memory                                                   | 等同于requests.cpu/requests.memory                        |
+| requests.storage                                             | 所有PVC请求容量总和不超过该值                             |
+| persistentvolumeclaims                                       | 所有PVC数量总和不超过该值                                 |
+| <storage-class-name>.storageclass.storage.k8s.io/requests.storage | 所有与<storage-class-name>相关的PVC请求容量总和不超过该值 |
+| <storage-class-name>.storageclass.storage.k8s.io/persistentvolumeclaims | 所有与<storage-class-name>相关的PVC数量总和不超过该值     |
+| pods、count/deployments.apps、count/statfulsets.apps、count/services、count/secrets、count/configmaps、count/job.batch、count/cronjobs.batch |                                                           |
+
+### 1.2 资源配额演示
+
+创建一个ResourceQuota,要求如下：
+
+1. 针对test命名空间进行限制
+2. request资源：CPU:1  memory:2G
+3. limits资源：CPU:1.5  memory:2.5G
+
+yaml内容：
+
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: rq-tst
+  namespace: test
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: "1.5Gi"
+    limits.cpu: "1.5"
+    limits.memory: "2Gi"
+```
+
+应用后查看：
+
+```shell
+kubectl get quota -n test
+```
+
+可以列出资源的使用情况
+
+![image-20220105165626297](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105165626297.png)
+
+测试：
+
+创建一个pod，request超过限制源，limits不超过
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+  namespace: test
+spec:
+  containers:
+  - name: test-rq
+    image: nginx
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1.5"
+      limits:
+        memory: "2Gi"
+        cpu: "1.5"
+```
+
+应用，后提示：cpu资源请求超过
+
+![image-20220105170205898](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105170205898.png)
+
+request资源修改为符合要求：
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+  namespace: test
+spec:
+  containers:
+  - name: test-rq
+    image: nginx
+    resources:
+      requests:
+        memory: "0.5Gi"
+        cpu: "0.5"
+      limits:
+        memory: "0.5Gi"
+        cpu: "0.8"
+```
+
+再次创建，可以正常创建
+
+完成后查看quota使用情况
+
+```shell
+kubectl get quota -n test
+```
+
+![image-20220105184304475](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105184304475.png)
+
+
+
+### 1.3 存储资源
+
+yaml内容如下：
+
+创建一个ResourceQuota，限制命名空间test只允许创建10Gi的pvc, managed-nfs持久卷中申请不能超过5Gi
+
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: storage-resources
+  namespace: test
+spec:
+  hard:
+    requests.storage: "10G"
+    managed-nfs.storage.storageclass.storage.k8s.io/requests.storage: "5G"
+```
+
+
+
+### 1.4 对象数量配额
+
+限制某个资源创建的数量，如pod，deployment
+
+创建一个限制，只允许test命名空间创建：pod的数量10，deployment：3，svc:3
+
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: object-counts
+  namespace: test
+spec:
+  hard:
+    pods: "10"
+    count/deployments.apps: "3"
+    count/services: "3"
+```
+
+```shell
+# 查看
+kubectl get quota -n test
+```
+
+![image-20220105212909850](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105212909850.png)
+
+## 2 .**LimitRange**
+
+### 2.1 说明
+
+默认情况下，K8s集群上的容器对计算资源没有任何限制，可能会导致个别容器资源过大导致影响其他容器正常工作，这时可以使用LimitRange定义容器默认CPU和内存请求值或者最大上限
+
+LimitRange限制维度：
+
+-  限制容器配置requests.cpu/memory，limits.cpu/memory的最小、最大值
+
+- 限制容器配置requests.cpu/memory，limits.cpu/memory的默认值 
+
+- 限制PVC配置requests.storage的最小、最大值
+
+### 2.2 资源最大最小限制
+
+限制容器最大请求和最小请求
+
+新建的容器最大的资源请求为：1C/1G
+
+新建的容器默认的资源请求为：0.2C/200m
+
+```yaml
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: cpu-memory-min-max
+  namespace: test
+spec:
+  limits:
+  - max: # 容器能设置limit的最大值
+      cpu: 1
+      memory: 1Gi
+    min: # 容器能设置request的最小值
+      cpu: 200m
+      memory: 200Mi
+    type: Container
+```
+
+测试：
+
+创建一个请求内存大于1G的pod。 注意把之前resource quota限制删除再进行测试
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: my-pod
+  namespace: test
+spec:
+  containers:
+  - name: test-rq
+    image: nginx
+    resources:
+      requests:
+        memory: "1.5Gi"
+        cpu: "0.5"
+```
+
+应用，提示请求资源超了
+
+![image-20220105213122106](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220105213122106.png)
+
+修改为0.5G,再次应用就可以正常创建
+
+
+
+# 四、系统强化
+
+## 1. 最小特权
+
+**最小特权原则 (Principle of least privilege，POLP) ：**是一种信息安全概念，即为用户提供执行其工作职责所需的最小权限等级或许可。最小特权原则被广泛认为是网络安全的最佳实践，也是保护高价值数据和资产的特权访问的基本方式。
+
+
+
+**最小特权原则 (POLP) 重要性：**
+
+- **减少网络攻击面：**当今，大多数高级攻击都依赖于利用特权凭证。通过限制超级用户和管理员权限，最小权限执行有助于减少总体网络攻击面。
+
+- **阻止恶意软件的传播：** 通过在服务器或者在应用系统上执行最小权限，恶意软件攻击（例如SQL注入攻击）将很难提权来增加访问权限并横向移动破坏其他软件、设备。
+
+- **有助于简化合规性和审核**：许多内部政策和法规要求都要求组织对特权帐户实施最小权限原则，以防止对关键业务系 统的恶意破坏。最小权限执行可以帮助组织证明对特权活动的完整审核跟踪的合规性
+
+
+
+**在团队中实施最小特权原则 (POLP) ：** 
+
+- 在所有服务器、业务系统中，审核整个环境以查找特权帐户（例如SSH账号、管理后台账号、跳板机账号）； 
+
+- 减少不必要的管理员权限，并确保所有用户和工具执行工作时所需的权限；
+
+- 定期更改管理员账号密码；
+
+- 监控管理员账号操作行为，告警通知异常活动。
+
+
+
+## 2. appArmor限制容器资源访问
+
+### 2.1 appArmor说明
+
+**AppArmor（Application Armor）** 是一个 Linux 内核安全模块，可用于限制主机操作系统上运行的进程的功能。每个进程都可以拥有自己的安全配置文件。安全配置文件用来允许或禁止特定功能，例如网络访问、文件读/写/执行权限等。
+
+**Linux发行版内置**：Ubuntu、Debian  （注意Centos是没有的）
+
+
+
+**Apparmor两种工作模式：**
+
+- Enforcement（强制模式） ：在这种模式下，配置文件里列出的限制条件都会得到执行，并且对于违反这些限制条件的程序会进行日志记录。
+
+- Complain（投诉模式）：在这种模式下，配置文件里的限制条件不会得到执行，Apparmor只是对程序的行为进行记录。一般用于调试。
+
+
+
+**常用命令：** 
+
+- apparmor_status：查看AppArmor配置文件的当前状态的
+
+- apparmor_parser：将AppArmor配置文件加载到内核中 
+
+- apparmor_parser <profile># 加载到内核中
+
+- apparmor_parser -r <profile># 重新加载配置
+
+- apparmor_parser -R <profile># 删除配置
+
+- aa-complain：将AppArmor配置文件设置为投诉模式，需要安装apparmor-utils软件包
+
+- aa-enforce：将AppArmor配置文件设置为强制模式，需要安装apparmor-utils软件包
+
+
+
+**K8s使用AppArmor的先决条件：**
+
+-  K8s版本v1.4+，检查是否支持：`kubectl describe node |grep AppArmor`
+
+  ![image-20220109170100733](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220109170100733.png)
+
+- Linux内核已启用AppArmor，查看 cat /sys/module/apparmor/parameters/enabled
+
+  ![image-20220109170113791](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220109170113791.png)
+
+- 容器运行时需要支持AppArmor，目前Docker已支持
+
+
+
+AppArmor 目前处于测试阶段，因此在注解中指定AppArmor策略配置文件
+
+示例：
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hello-apparmor
+  annotations:
+  container.apparmor.security.beta.kubernetes.io/<container_name>: localhost/<profile_ref>
+```
+
+AppArmor 目前处于测试阶段，因此在注解中指定AppArmor策略配置文件
+
+<container_name> Pod中容器名称
+
+<profile_ref> Pod所在宿主机上策略名，默认目录/etc/apparmor.d
+
+
+
+### 2.2 **容器文件系统访问限制**
+
+实现步骤：
+
+- 将自定义策略配置文件保存到/etc/apparmor.d/
+- 加载配置文件到内核：apparmor_parser <profile>
+
+- Pod注解指定策略配置名
+
+
+
+1. 创建策略文件
+
+   ```shell
+   vi /etc/apparmor.d/k8s-deny-write
+   ```
+
+   创建规则，不允许在/tmp目录下进行写操作，内容如下
+
+   ```
+   #include <tunables/global>
+   profile k8s-deny-write flags=(attach_disconnected) {
+     include <abstractions/base>
+     file, #允许所有文件读写，创建和查看文件都有
+     deny /tmp/** w,   #控制某个目录进行读写
+   }
+   ```
+
+   说明：
+
+   - 第一行：导入依赖，遵循C语言约定
+
+   - 第二行：指定策略名
+
+   - 第三行：{} 策略块
+
+   ![image-20220109173933071](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220109173933071.png)
+
+2. 加载配置文件到内核
+
+   ```shell
+   # 加载配置
+   apparmor_parser /etc/apparmor.d/k8s-deny-write
+   # 查看
+   apparmor_status |grep k8s
+   ```
+
+   ![image-20220109172903263](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220109172903263.png)
+
+3. Pod注解指定策略配置名
+
+   ```yaml
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: hello-apparmor
+     annotations:
+       container.apparmor.security.beta.kubernetes.io/hello: localhost/k8s-deny-write
+   spec:
+     nodeName: master01
+     containers:
+     - name: hello
+       image: busybox
+       command: [ sh, -c, "echo 'hello' && sleep 1h"]
+   ```
+
+   注意：appamore需要在所有的节点都要配置，这里只配置了master节点所以使用了nodeName: master01，指定节点
+
+4. 测试
+
+   ```shell
+   # 进入容器
+   kubectl  exec -it hello-apparmor sh
+   # 测试/tmp目录是否有写入权限
+   touch /tmp/a.txt
+   ```
+
+   提示没有权限
+   
+   ![image-20220109192950355](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220109192950355.png)
+
+
+
+
+
+# 五、最小化微服务漏洞
+
+## 1. Pod安全上下文
+
+### 1.1 说明
+
+**安全上下文（Security Context）：**K8s对Pod和容器提供的安全机制，可以设置Pod特权和访问控制。
+
+
+
+**安全上下文限制维度：**
+
+- 自主访问控制（Discretionary Access Control）：基于用户ID（UID）和组ID（GID），来判定对对象（例如文件）的访问权限。
+
+- 安全性增强的 Linux（SELinux）： 为对象赋予安全性标签。
+
+- 以特权模式或者非特权模式运行。
+
+- Linux Capabilities: 为进程赋予 root 用户的部分特权而非全部特权。
+
+- AppArmor：定义Pod使用AppArmor限制容器对资源访问限制
+
+- Seccomp：定义Pod使用Seccomp限制容器进程的系统调用
+
+- AllowPrivilegeEscalation： 禁止容器中进程（通过 SetUID 或 SetGID 文件模式）获得特权提升。当容器以特权模式运行或者具有CAP_SYS_ADMIN能力时，AllowPrivilegeEscalation总为True。 
+
+- readOnlyRootFilesystem：以只读方式加载容器的根文件系统。
+
+
+
+### 1.2 案例1：**设置容器以普通用户运行**
+
+需求：容器中的应用程序默认以root账号运行的，这个root与宿主机root账号是相同的，拥有大部分对Linux内核的系统调用权限，这样是不安全的，所以我们应该将容器以普通用户运行，减少应用程序对权限的使用。
+
+实现方式有两种：
+
+1. dockerfile中使用USER指定运行用户。
+2. K8s里指定spec.securityContext.runAsUser，指定容器默认用户UID
+
+**dockerfile方式：**
+
+```dockerfile
+FROM utry.harbor.com/basic/java:8-jdk-alpine 
+COPY ./target/eureka-service.jar /usr/local/ 
+WORKDIR /usr/local/  
+# 修改docker时区为东八区，规避应用程序和北京时间相差8小时问题 
+ENV TZ=Asia/Shanghai 
+EXPOSE 7001
+CMD ["java", "-jar","eureka-service.jar"]
+```
+
+以上是不使用USER运行的dockerfile，使用k8s部署后我们查看一下进程，是使用root用户进行启动的
+
+![image-20220110152351628](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220110152351628.png)
+
+修改dockerfile，增加以下内容：
+
+RUN useradd dmt :新增一个dmt普通用户
+
+USER dmt ：指定运行用户为dmt
+
+注意alpine无法是否用useradd,所以这里换成了centos的基础镜像
+
+```dockerfile
+FROM utry.harbor.com/basic/cnetos_jdk8:v1
+COPY ./target/eureka-service.jar /usr/local/
+RUN useradd dmt
+WORKDIR /usr/local/  
+# 修改docker时区为东八区，规避应用程序和北京时间相差8小时问题 
+ENV TZ=Asia/Shanghai 
+EXPOSE 7001
+USER dmt
+CMD ["java", "-jar","eureka-service.jar"]
+```
+
+再次查看：
+
+运行用户已经变为普通用户dmt
+
+![image-20220110163541178](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220110163541178.png)
+
+
+
+**K8S方式：**
+
+还是使用上面的进行测试，还原为root用户启动
+
+![image-20220111101554399](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220111101554399.png)
+
+修改yaml文件：
+
+在容器spec中添加以下内容,注意是容器规格（spec）中，与container同级
+
+```yaml
+    spec:
+      securityContext:
+        runAsUser: 1000 # 镜像里必须有这个用户UID
+        fsGroup: 1000 # 数据卷挂载后的目录属组设置为该组
+```
+
+![image-20220111103956890](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220111103956890.png)
+
+测试：
+
+查看运行的用户是1000而不是用户名，这是因为镜像里没有这个用户的UID，如果想要显示用户名需要在镜像中先添加一个对应的用户，这里就先不在演示了。
+
+![image-20220111104425451](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220111104425451.png)
+
+
+
+## 2. secret
+
+### 2.1 说明
+
+Secret是一个用于存储敏感数据的资源，所有的数据要经过base64编码，数据实际会存储在K8s中Etcd，然后通过创建Pod时引用该数据
+
+**Pod使用configmap数据有两种方式：**
+
+- 变量注入
+
+- 数据卷挂载
+
+**kubectl create secret 支持三种数据类型：**
+
+- docker-registry：存储镜像仓库认证信息
+
+- generic：从文件、目录或者字符串创建，例如存储用户名密码
+
+- tls：存储证书，例如HTTPS证书
+
+### 2.2 案例： mysql用户密码存放在secret中
+
+先把密码进行base64加密，注意：直接使用`base64`命令进行加密是不行的
+
+```shell
+kubectl create secret generic  passwd --from-literal=pass=123456 --dry-run -o yaml
+```
+
+![image-20220116205922178](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220116205922178.png)
+
+yaml内容：
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysql-secret
+type: Opaque # 数据类型,就是generic
+data:
+  mysql-root-password: "MTIzNDU2" # 加密键值对，需要进行base64加密
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql-test
+spec:
+  selector:
+    matchLabels:
+      app: mysql-test
+  template:
+    metadata:
+      labels:
+        app: mysql-test
+    spec:
+      containers:
+      - name: db-test
+        image: mysql:5.7.30
+        env: # 设置环境变量引用secret
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: mysql-root-password
+        command: ['/bin/bash', -c, 'env']
+```
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mysqlpassword
+type: Opaque
+data:
+  password: MTIz #密码123
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: mysqlserver
+spec:
+  containers:
+    - name: mysql-server
+      image: mysql:5.6
+      env:
+        - name: MYSQL_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysqlpassword
+              key: password
+```
+
+
+
+
+
+# 六、审计日志
+
+## 1. 说明
+
+在kubernetes集群中，API Server的审计日志记录了哪些用户、哪些服务请求操作集群资源，并且可以编写不同规则，控制忽略、存储的操作日志。
+
+审计日志采用JSON格式输出，每条日志都包含丰富的元数据，例如请求的URL、HTTP方法、客户端来源等，你可以使用监控服务来分析API流量，以检测趋势或可能存在的安全隐患。
+
+这些可能会访问API Server： 
+
+- 管理节点（controller-manager、scheduler） 
+
+- 工作节点（kubelet、kube-proxy） 
+
+- 集群服务（CoreDNS、HPA、Calico等）
+
+- kubectl、API、Dashboard
+
+
+
+**事件和阶段：**
+
+当客户端向 API Server发出请求时，该请求将经历一个或多个阶段：
+
+ApiServer处理请求流程图
+
+<img src="https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220129215332783.png" alt="image-20220129215332783" style="zoom:150%;" />
+
+| 阶段             | 说明                               |
+| ---------------- | ---------------------------------- |
+| RequestReceived  | 审核处理程序已收到请求             |
+| ResponseStarted  | 已发送响应标头，但尚未发送响应正文 |
+| ResponseComplete | 响应正文已完成，不再发送任何字节   |
+| Panic            | 内部服务器出错，请求未完成         |
+
+
+
+## **2. 日志级别**
+
+Kubernetes审核策略文件包含一系列规则，描述了记录日志的级别，采集哪些日志，不采集哪些日志
+
+| 级别            | 说明                                                 |
+| --------------- | ---------------------------------------------------- |
+| None            | 不为事件创建日志条目                                 |
+| Metadata        | 创建日志条目。包括元数据，但不包括请求正文或响应正文 |
+| Request         | 创建日志条目。包括元数据和请求正文，但不包括响应正文 |
+| RequestResponse | 创建日志条目。包括元数据、请求正文和响应正文         |
+
+官网示例：
+
+https://kubernetes.io/zh/docs/tasks/debug-application-cluster/audit/#audit-policy
+
+```yaml
+apiVersion: audit.k8s.io/v1 # This is required.
+kind: Policy
+# Don't generate audit events for all requests in RequestReceived stage.
+omitStages:
+  - "RequestReceived"
+rules:
+  # Log pod changes at RequestResponse level
+  - level: RequestResponse
+    resources:
+    - group: ""
+      # Resource "pods" doesn't match requests to any subresource of pods,
+      # which is consistent with the RBAC policy.
+      resources: ["pods"]
+  # Log "pods/log", "pods/status" at Metadata level
+  - level: Metadata
+    resources:
+    - group: ""
+      resources: ["pods/log", "pods/status"]
+
+  # Don't log requests to a configmap called "controller-leader"
+  - level: None
+    resources:
+    - group: ""
+      resources: ["configmaps"]
+      resourceNames: ["controller-leader"]
+
+  # Don't log watch requests by the "system:kube-proxy" on endpoints or services
+  - level: None
+    users: ["system:kube-proxy"]
+    verbs: ["watch"]
+    resources:
+    - group: "" # core API group
+      resources: ["endpoints", "services"]
+
+  # Don't log authenticated requests to certain non-resource URL paths.
+  - level: None
+    userGroups: ["system:authenticated"]
+    nonResourceURLs:
+    - "/api*" # Wildcard matching.
+    - "/version"
+
+  # Log the request body of configmap changes in kube-system.
+  - level: Request
+    resources:
+    - group: "" # core API group
+      resources: ["configmaps"]
+    # This rule only applies to resources in the "kube-system" namespace.
+    # The empty string "" can be used to select non-namespaced resources.
+    namespaces: ["kube-system"]
+
+  # Log configmap and secret changes in all other namespaces at the Metadata level.
+  - level: Metadata
+    resources:
+    - group: "" # core API group
+      resources: ["secrets", "configmaps"]
+
+  # Log all other resources in core and extensions at the Request level.
+  - level: Request
+    resources:
+    - group: "" # core API group
+    - group: "extensions" # Version of group should NOT be included.
+
+  # A catch-all rule to log all other requests at the Metadata level.
+  - level: Metadata
+    # Long-running requests like watches that fall under this rule will not
+    # generate an audit event in RequestReceived.
+    omitStages:
+      - "RequestReceived"
+```
+
+
+
+## 3. 开启日志审计
+
+审计日志支持写入本地文件和Webhook（发送到外部HTTP API）两种方式。这里使用本地文件方式
+
+启用审计日志功能：
+
+- **修改配置文件**
+
+  修改kube-apiserver.yaml配置文件
+
+  ```shell
+  vi /etc/kubernetes/manifests/kube-apiserver.yaml
+  ```
+
+  添加一下内容：
+
+  ```yaml
+      - --audit-policy-file=/etc/kubernetes/audit-policy.yaml
+      - --audit-log-path=/var/log/kubernetes/audit/audit-policy.log
+      - --audit-log-maxage=30
+      - --audit-log-maxbackup=10
+      - --audit-log-maxsize=100
+  ```
+
+  **注意:**添加完成后apiserver会无法启动，这是因为没有对应的`/etc/kubernetes/audit-policy.yaml`策略文件和挂载文件
+
+  ![image-20220207211737572](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207211737572.png)
+
+- **添加策略文件**
+
+  这里直接把官方的示例文件复制过来
+
+  ```shell
+  mkdir -p /etc/kubernetes/audit/
+  vim /etc/kubernetes/audit-policy.yaml
+  ```
+
+  添加以下内容：
+
+  ```yaml
+  apiVersion: audit.k8s.io/v1 # This is required.
+  kind: Policy
+  # Don't generate audit events for all requests in RequestReceived stage.
+  omitStages:
+    - "RequestReceived"
+  rules:
+    # Log pod changes at RequestResponse level
+    - level: RequestResponse
+      resources:
+      - group: ""
+        # Resource "pods" doesn't match requests to any subresource of pods,
+        # which is consistent with the RBAC policy.
+        resources: ["pods"]
+    # Log "pods/log", "pods/status" at Metadata level
+    - level: Metadata
+      resources:
+      - group: ""
+        resources: ["pods/log", "pods/status"]
+  
+    # Don't log requests to a configmap called "controller-leader"
+    - level: None
+      resources:
+      - group: ""
+        resources: ["configmaps"]
+        resourceNames: ["controller-leader"]
+  
+    # Don't log watch requests by the "system:kube-proxy" on endpoints or services
+    - level: None
+      users: ["system:kube-proxy"]
+      verbs: ["watch"]
+      resources:
+      - group: "" # core API group
+        resources: ["endpoints", "services"]
+  
+    # Don't log authenticated requests to certain non-resource URL paths.
+    - level: None
+      userGroups: ["system:authenticated"]
+      nonResourceURLs:
+      - "/api*" # Wildcard matching.
+      - "/version"
+  
+    # Log the request body of configmap changes in kube-system.
+    - level: Request
+      resources:
+      - group: "" # core API group
+        resources: ["configmaps"]
+      # This rule only applies to resources in the "kube-system" namespace.
+      # The empty string "" can be used to select non-namespaced resources.
+      namespaces: ["kube-system"]
+  
+    # Log configmap and secret changes in all other namespaces at the Metadata level.
+    - level: Metadata
+      resources:
+      - group: "" # core API group
+        resources: ["secrets", "configmaps"]
+  
+    # Log all other resources in core and extensions at the Request level.
+    - level: Request
+      resources:
+      - group: "" # core API group
+      - group: "extensions" # Version of group should NOT be included.
+  
+    # A catch-all rule to log all other requests at the Metadata level.
+    - level: Metadata
+      # Long-running requests like watches that fall under this rule will not
+      # generate an audit event in RequestReceived.
+      omitStages:
+        - "RequestReceived"
+  ```
+
+  
+
+- **添加挂载**
+
+  还是修改kube-apiserver.yaml配置文件
+
+  ```shell
+  vi /etc/kubernetes/manifests/kube-apiserver.yaml
+  ```
+
+  **先配置挂载容器:**
+
+  1. audit-policy.yaml策略配置文件
+
+  2. audit日志目录
+
+  在volumeMounts在添加以下配置，注意格式
+
+  ```yaml
+      - mountPath: /etc/kubernetes/audit-policy.yaml
+        name: audit
+        readOnly: true
+      - mountPath: /var/log/kubernetes/audit/
+        name: audit-log
+        readOnly: false
+  ```
+
+  ![image-20220207205841264](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207205841264.png)
+
+  **再配置挂载宿主机的目录：**
+
+  在volumes:添加以下内容
+
+  ```yam
+    - name: audit
+      hostPath:
+        path: /etc/kubernetes/audit-policy.yaml
+        type: File
+    - name: audit-log
+      hostPath:
+        path: /var/log/kubernetes/audit/
+        type: DirectoryOrCreate
+  ```
+
+  ![image-20220207210223751](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207210223751.png)
+
+  
+
+修改保存后，过一段时间查看pod是否正常，如果不正常说明修改配置有问题
+
+```shell
+kubectl  get pod -A |grep api
+```
+
+![image-20220207213734450](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207213734450.png)
+
+
+
+## 4.日志查看
+
+查看配置的日志输出文件，查看是否有日志输出
+
+```shell
+tail -100f /var/log/kubernetes/audit/audit-policy.log
+```
+
+![image-20220207214007755](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207214007755.png)
+
+输出的日志为json格式，可以复制一部分使用`jq`命令查看
+
+```shell
+echo '{"kind":"Event","apiVersion":"audit.k8s.io/v1","level":"Request","auditID":"96810003-f5a7-40c0-be72-f75c4468401d","stage":"ResponseComplete","requestURI":"/api/v1/nodes?allowWatchBookmarks=true\u0026fieldSelector=metadata.name%3Dnode01\u0026resourceVersion=44257\u0026timeout=7m41s\u0026timeoutSeconds=461\u0026watch=true","verb":"watch","user":{"username":"system:node:node01","groups":["system:nodes","system:authenticated"]},"sourceIPs":["11.0.1.112"],"userAgent":"kubelet/v1.22.0 (linux/amd64) kubernetes/c2b5237","objectRef":{"resource":"nodes","name":"node01","apiVersion":"v1"},"responseStatus":{"metadata":{},"status":"Success","message":"Connection closed early","code":200},"requestReceivedTimestamp":"2022-02-07T13:32:22.409211Z","stageTimestamp":"2022-02-07T13:40:03.413158Z","annotations":{"authorization.k8s.io/decision":"allow","authorization.k8s.io/reason":""}}' |jq
+```
+
+输出结果
+
+![image-20220207214210055](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207214210055.png)
+
+
+
+## 5. 自定义日志示例
+
+**示例：只记录指定资源操作日志**
+
+之前使用官方的策略配置文件，里面配置的比较详细输出的内容也很多，其实里面有很多不需要的日志内容，这里可以指定输出某些日志
+
+如：只保留针对pod操作的日志，并且日志级别为`Metadata`
+
+```yaml
+apiVersion: audit.k8s.io/v1
+kind: Policy
+# 忽略步骤，不为RequestReceived阶段生成审计日志
+omitStages:
+  - "RequestReceived"
+rules:
+# 不记录日志
+  - level: None
+    users:
+      - system:apiserver
+      - system:kube-controller-manager
+      - system:kube-scheduler
+      - system:kube-proxy
+      - kubelet
+# 针对资源记录日志
+  - level: Metadata
+    resources:
+    - group: ""
+      resources: ["pods"]
+# 其他资源不记录日志
+  - level: None
+```
+
+修改策略文件，删除原有内容，添加以上配置
+
+```shell
+vim /etc/kubernetes/audit-policy.yaml
+```
+
+重启apiserver
+
+```shell
+kubectl  delete  pod kube-apiserver-master01   -n kube-system
+```
+
+等待一会，查看pod状态是否为running
+
+```shell
+kubectl  get  pod kube-apiserver-master01   -n kube-system
+```
+
+![image-20220207215738249](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207215738249.png)
+
+查看日志，打印是否减少。（这种方法可能不生效，如果不生效可以使用下面的kill方式）
+
+kill掉apiserver进程
+
+```shell
+ps -ef |grep kube-apiserver
+kill -9 pid
+```
+
+再次查看日志，已经生效，下面进行测试
+
+先get pod查看是否有日志打印
+
+```shell
+kubectl  get pod
+```
+
+日志输出：
+
+![image-20220207221245935](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207221245935.png)
+
+查看deployment，svc。日志无输出
+
+```shell
+kubectl  get deployment，svc -A
+```
+
+修改策略文件，添加针对deployment操作的日志。
+
+注意pod是核心组，所以组名为""，deployment为apps组，所以要添加对应的组"apps"。后面需要添加其它资源，也要对应的组
+
+```yaml
+apiVersion: audit.k8s.io/v1
+kind: Policy
+# 忽略步骤，不为RequestReceived阶段生成审计日志
+omitStages:
+  - "RequestReceived"
+rules:
+# 不记录日志
+  - level: None
+    users:
+      - system:apiserver
+      - system:kube-controller-manager
+      - system:kube-scheduler
+      - system:kube-proxy
+      - kubelet
+# 针对资源记录日志
+  - level: Metadata
+    resources:
+    - group: ""
+      resources: ["pods"]
+    - group: "apps"
+      resources: ["deployments"]
+# 其他资源不记录日志
+  - level: None
+```
+
+按照上面的操作方式，kill掉apiserver进程，使配置生效
+
+再次操作查看deployment
+
+```shell
+kubectl  get deployment -A
+```
+
+查看日志输出，已经有对应的deployment的日志输出
+
+![image-20220207223819965](https://wxy-2021.oss-cn-shenzhen.aliyuncs.com/img/image-20220207223819965.png)
+

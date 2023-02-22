@@ -1,0 +1,1 @@
+KUBELET_ARGS="--pod-infra-container-image=kubernetes/pause --kubeconfig=/home/yaoyuquan/.kube/config --logtostderr=false --log-dir=/var/log/kubernetes --v=2"

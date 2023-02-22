@@ -1,0 +1,15 @@
+[Unit]
+Description=Kubernetes Proxy-Server
+Documentation=https://github.com/kubernetes/kubernetes
+After=network.target
+Requires=network.service
+
+
+[Service]
+EnvironmentFile=/home/yaoyuquan/kubernetes-config/kube-proxy
+ExecStart=/home/yaoyuquan/kubernetes-exec/kube-proxy $KUBE_PROXY_ARGS
+Restart=on-failure
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
